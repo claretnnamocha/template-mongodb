@@ -12,7 +12,7 @@ export const lock = (app: Express) => {
     app.use((req, res, next) => {
       req.secure
         ? next()
-        : res.redirect("https://" + req.headers.host + req.url);
+        : res.redirect(`https://${req.headers.host}${req.url}`);
     });
   }
   const STS = sts.getSTS({

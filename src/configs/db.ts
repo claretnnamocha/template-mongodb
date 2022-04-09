@@ -1,19 +1,10 @@
-import { Sequelize, SequelizeScopeError } from "sequelize";
-import { v4 as uuid } from "uuid";
-import { dbSecure, dbURL } from "./env";
-
-export const db = new Sequelize(dbURL, {
-  dialectOptions: !dbSecure
-    ? {}
-    : { ssl: { require: true, rejectUnauthorized: false } },
-  logging: false,
-});
+import mongoose from "mongoose";
+import { dbURL } from "./env";
 
 const seed = async (models: any) => {
   console.log("DB cleared");
 
   await models.User.create({
-    id: uuid(),
     email: "devclareo@gmail.com",
     firstname: "Claret",
     lastname: "Nnamocha",
@@ -28,16 +19,17 @@ const seed = async (models: any) => {
 };
 
 export const authenticate = ({ clear = false }) => {
-  db.authenticate()
+  mongoose
+    .connect(dbURL)
     .then(async () => {
       console.log("Connection to Database has been established successfully.");
       const models = require("../models");
-      const opts = clear ? { force: true } : { alter: true };
-      for (let schema in models) await models[schema].sync(opts);
+      for (const schema in models)
+        mongoose.model(schema).syncIndexes({ clear });
       if (clear) await seed(models);
       console.log("Migrated");
     })
-    .catch((error: SequelizeScopeError) =>
-      console.error("Unable to connect to the database: " + error.message)
+    .catch((error) =>
+      console.error(`Unable to connect to the database: ${error.message}`)
     );
 };

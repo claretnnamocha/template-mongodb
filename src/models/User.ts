@@ -1,84 +1,83 @@
+import { Schema} from "mongoose";
 import bcrypt from "bcryptjs";
-import { DataTypes } from "sequelize";
-import { db } from "../configs/db";
+import mongoose from "mongoose";
 
-const User = db.define(
-  "User",
-  {
-    id: { type: DataTypes.UUID, primaryKey: true },
-    email: { type: DataTypes.STRING, allowNull: false, unique: true },
-    firstname: { type: DataTypes.STRING },
-    lastname: { type: DataTypes.STRING },
-    othernames: { type: DataTypes.STRING },
-    avatar: { type: DataTypes.STRING },
-    role: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      defaultValue: "user",
-      values: ["user", "admin"],
-    },
-    permissions: {
-      type: DataTypes.ARRAY(DataTypes.STRING),
-      defaultValue: [],
-      allowNull: false,
-    },
-    phone: { type: DataTypes.STRING },
-    location: { type: DataTypes.STRING },
-    password: {
-      type: DataTypes.STRING,
-      set(value: string) {
-        const salt = bcrypt.genSaltSync();
-        this.setDataValue("password", bcrypt.hashSync(value, salt));
-      },
-    },
-    isDeleted: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-      allowNull: false,
-    },
-    verifiedemail: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-      allowNull: false,
-    },
-    verifiedphone: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-      allowNull: false,
-    },
-    active: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: true,
-      allowNull: false,
-    },
-    loginValidFrom: {
-      type: DataTypes.STRING,
-      defaultValue: Date.now(),
-      allowNull: false,
-    },
-    verifyToken: {
-      type: DataTypes.STRING,
-      defaultValue: null,
-    },
-    resetToken: {
-      type: DataTypes.STRING,
-      defaultValue: null,
-    },
-    updateToken: {
-      type: DataTypes.STRING,
-      defaultValue: null,
-    },
-    tokenExpires: {
-      type: DataTypes.STRING,
-      defaultValue: "0",
+let model = new Schema({
+  id: { type: String, index: true },
+  email: { type: String, index: true },
+  firstname: { type: String },
+  lastname: { type: String },
+  othernames: { type: String },
+  avatar: { type: String },
+  role: {
+    type: String,
+    default: "user",
+    enum: ["user", "admin"],
+    required: true,
+  },
+  permissions: {
+    type: Array,
+    default: [],
+    required: true,
+  },
+  phone: { type: String },
+  location: { type: String },
+  password: {
+    type: String,
+    set: (value: string) => {
+      const salt = bcrypt.genSaltSync();
+      return (bcrypt.hashSync(value, salt));
     },
   },
-  { timestamps: true, tableName: "user" }
-);
+  isDeleted: {
+    type: Boolean,
+    default: false,
+    required: true,
+  },
+  verifiedemail: {
+    type: Boolean,
+    default: false,
+    required: true,
+  },
+  verifiedphone: {
+    type: Boolean,
+    default: false,
+    required: true,
+  },
+  active: {
+    type: Boolean,
+    default: true,
+    required: true,
+  },
+  loginValidFrom: {
+    type: String,
+    default: Date.now(),
+    required: true,
+  },
+  verifyToken: {
+    type: String,
+    default: null,
+  },
+  resetToken: {
+    type: String,
+    default: null,
+  },
+  updateToken: {
+    type: String,
+    default: null,
+  },
+  tokenExpires: {
+    type: String,
+    default: "0",
+  }
+}, { timestamps: true, collection: 'user' })
 
-User.prototype.toJSON = function () {
-  const data = this.dataValues;
 
+model.methods.toJSON = function () {
+  const data = this._doc;
+
+  delete data._id
+  delete data.__v;
   delete data.password;
   delete data.verifyToken;
   delete data.resetToken;
@@ -93,8 +92,10 @@ User.prototype.toJSON = function () {
   return data;
 };
 
-User.prototype.validatePassword = function (val: string) {
-  return bcrypt.compareSync(val, this.getDataValue("password"));
+model.methods.validatePassword = function (val: string) {
+  return bcrypt.compareSync(val, this.password);
 };
+
+const User = mongoose.model('User', model)
 
 export { User };

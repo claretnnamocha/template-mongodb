@@ -1,9 +1,7 @@
 import bcrypt from "bcryptjs";
 import randomstring from "randomstring";
-import { Op } from "sequelize";
-import { v4 as uuid } from "uuid";
-import { devEnv } from "../../configs/env";
 import { jwt } from "../../helpers";
+import { devEnv } from "../../configs/env";
 import { sendEmail } from "../../jobs";
 import { User } from "../../models";
 import { UserSchema } from "../../types/models";
@@ -37,15 +35,12 @@ export const signUp = async (
       }
     }
 
-    const id = uuid();
-
-    await User.create({
-      id,
+    const user = await User.create({
       ...params,
     });
 
     const token: string = await generateToken({
-      userId: id,
+      userId: user.id,
       length: 10,
     });
 
@@ -67,7 +62,7 @@ export const signUp = async (
       payload: {
         status: false,
         message: "Error trying to create account".concat(
-          devEnv ? ": " + error : ""
+          devEnv ? `: ${error}` : ""
         ),
       },
       code: 500,
@@ -84,42 +79,42 @@ export const signIn = async (
   params: auth.SignInRequest
 ): Promise<others.Response> => {
   try {
-    const { user, password } = params;
+    const { user: identifier, password } = params;
 
-    const _user: UserSchema = await User.findOne({
+    const user: UserSchema = await User.findOne({
       where: {
-        [Op.or]: [{ email: user }, { phone: user }],
+        $or: [{ email: identifier }, { phone: identifier }],
       },
     });
 
-    if (!_user || !bcrypt.compareSync(password, _user.password)) {
+    if (!user || !bcrypt.compareSync(password, user.password)) {
       return {
         payload: { status: false, message: "Invalid username or password" },
         code: 401,
       };
     }
 
-    if (!_user.active) {
+    if (!user.active) {
       return {
         payload: { status: false, message: "Account is banned contact admin" },
         code: 403,
       };
     }
 
-    if (!_user.verifiedemail) {
+    if (!user.verifiedemail) {
       const token: string = await generateToken({
-        userId: _user.id,
+        userId: user.id,
         length: 10,
       });
 
       const { text, html } = msg.verifyEmail({
         token,
-        username: _user.email,
-        email: _user.email,
+        username: user.email,
+        email: user.email,
       });
 
       sendEmail({
-        to: _user.email,
+        to: user.email,
         subject: "Verify your email",
         text,
         html,
@@ -131,10 +126,11 @@ export const signIn = async (
       };
     }
 
-    const data: any = _user.toJSON();
+    const data: any = user.toJSON();
+
     data.token = jwt.generate({
-      payload: _user.id,
-      loginValidFrom: _user.loginValidFrom,
+      payload: user.id,
+      loginValidFrom: user.loginValidFrom,
     });
 
     return { status: true, message: "Login successful", data };
@@ -142,7 +138,7 @@ export const signIn = async (
     return {
       payload: {
         status: false,
-        message: "Error trying to login".concat(devEnv ? ": " + error : ""),
+        message: "Error trying to login".concat(devEnv ? `: ${error}` : ""),
       },
       code: 500,
     };
@@ -172,11 +168,12 @@ export const verifyAccount = async (
     }
 
     if (resend) {
-      if (user.verifiedemail)
+      if (user.verifiedemail) {
         return {
           payload: { status: false, message: "Profile is already verified" },
           code: 400,
         };
+      }
 
       const token: string = await generateToken({
         userId: user.id,
@@ -206,7 +203,7 @@ export const verifyAccount = async (
       };
     }
 
-    await user.update({ verifyToken: "" });
+    await User.updateOne({ email }, { verifyToken: "" });
 
     if (parseInt(user.tokenExpires) < Date.now()) {
       return {
@@ -215,7 +212,7 @@ export const verifyAccount = async (
       };
     }
 
-    await user.update({ verifiedemail: true, tokenExpires: "0" });
+    await User.updateOne({ email }, { verifiedemail: true, tokenExpires: "0" });
 
     return {
       payload: { status: true, message: "Account verified" },
@@ -226,7 +223,7 @@ export const verifyAccount = async (
       payload: {
         status: false,
         message: "Error trying to verify account".concat(
-          devEnv ? ": " + error : ""
+          devEnv ? `: ${error}` : ""
         ),
       },
       code: 500,
@@ -284,7 +281,7 @@ export const initiateReset = async (
       payload: {
         status: false,
         message: "Error trying to initiate reset".concat(
-          devEnv ? ": " + error : ""
+          devEnv ? `: ${error}` : ""
         ),
       },
       code: 500,
@@ -314,7 +311,7 @@ export const verifyReset = async (
       };
     }
 
-    await user.update({ resetToken: "" });
+    await User.updateOne({ id: user.id }, { resetToken: "" });
 
     if (parseInt(user.tokenExpires) < Date.now()) {
       return {
@@ -323,7 +320,7 @@ export const verifyReset = async (
       };
     }
 
-    await user.update({ tokenExpires: "0" });
+    await User.updateOne({ id: user.id }, { tokenExpires: "0" });
 
     const data: string = await generateToken({
       userId: user.id,
@@ -339,7 +336,7 @@ export const verifyReset = async (
     return {
       payload: {
         status: false,
-        message: "Error trying to login".concat(devEnv ? ": " + error : ""),
+        message: "Error trying to login".concat(devEnv ? `: ${error}` : ""),
       },
       code: 500,
     };
@@ -368,7 +365,7 @@ export const resetPassword = async (
       };
     }
 
-    await user.update({ updateToken: "" });
+    await User.updateOne({ id: user.id }, { updateToken: "" });
 
     if (parseInt(user.tokenExpires) < Date.now()) {
       return {
@@ -377,10 +374,10 @@ export const resetPassword = async (
       };
     }
 
-    let update: any = { password, tokenExpires: "0" };
+    const update: any = { password, tokenExpires: "0" };
     if (logOtherDevicesOut) update.loginValidFrom = Date.now();
 
-    await user.update(update);
+    await User.updateOne({ id: user.id }, update);
 
     return {
       payload: { status: true, message: "Password updated" },
@@ -391,7 +388,7 @@ export const resetPassword = async (
       payload: {
         status: false,
         message: "Error trying to reset password".concat(
-          devEnv ? ": " + error : ""
+          devEnv ? `: ${error}` : ""
         ),
       },
       code: 500,
@@ -406,7 +403,7 @@ export const generateToken = async ({
   charset = "alphanumeric",
   length = 5,
 }) => {
-  const user = await User.findByPk(userId);
+  const user = await User.findById(userId);
 
   let token: string;
   let exists: UserSchema;
@@ -424,10 +421,13 @@ export const generateToken = async ({
     });
   } while (exists);
 
-  await user.update({
-    [`${tokenType}Token`]: token,
-    tokenExpires: Date.now() + 60 * 1000 * expiresMins,
-  });
+  await User.updateOne(
+    { id: userId },
+    {
+      [`${tokenType}Token`]: token,
+      tokenExpires: Date.now() + 60 * 1000 * expiresMins,
+    }
+  );
 
   return token;
 };

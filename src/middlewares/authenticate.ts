@@ -1,8 +1,8 @@
 import { NextFunction, Response } from "express";
 import JWT from "jsonwebtoken";
+import { response } from "../helpers";
 import { env } from "../configs";
 import { devEnv } from "../configs/env";
-import { response } from "../helpers";
 import { User } from "../models";
 import { CustomRequest } from "../types/controllers";
 import { auth } from "../types/middlewares";
@@ -33,7 +33,7 @@ export const authenticate =
         where.role = role;
       }
 
-      const user: UserSchema = await User.findOne({ where });
+      const user: UserSchema = await User.findById({ where });
 
       if (!user || loginValidFrom < user.loginValidFrom)
         return response(res, { status: false, message: "Unauthorized" }, 401);
@@ -47,7 +47,7 @@ export const authenticate =
         res,
         {
           status: false,
-          message: "Unauthorized".concat(devEnv ? ": " + error : ""),
+          message: "Unauthorized".concat(devEnv ? `: ${error}` : ""),
         },
         401
       );

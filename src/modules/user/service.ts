@@ -1,6 +1,5 @@
-import { Op } from "sequelize";
-import { devEnv } from "../../configs/env";
 import { jwt, sms } from "../../helpers";
+import { devEnv } from "../../configs/env";
 import { User } from "../../models";
 import { UserSchema } from "../../types/models";
 import { auth, others, user } from "../../types/services";
@@ -18,13 +17,14 @@ export const getProfile = async (
   try {
     const { userId } = params;
 
-    const data: UserSchema = await User.findByPk(userId);
+    const data: UserSchema = await User.findById(userId);
 
-    if (!data)
+    if (!data) {
       return {
         payload: { status: false, message: "Profile does not exist" },
         code: 404,
       };
+    }
 
     return { status: true, message: "Profile", data };
   } catch (error) {
@@ -32,7 +32,7 @@ export const getProfile = async (
       payload: {
         status: false,
         message: "Error trying to get profile".concat(
-          devEnv ? ": " + error : ""
+          devEnv ? `: ${error}` : ""
         ),
       },
       code: 500,
@@ -51,7 +51,7 @@ export const verifyPhone = async (
   try {
     const { token, userId } = params;
 
-    let user: UserSchema = await User.findByPk(userId);
+    let user: UserSchema = await User.findById(userId);
 
     if (!token) {
       const token: string = await generateToken({
@@ -65,7 +65,7 @@ export const verifyPhone = async (
         body: msg.verifyPhone({ token, username: user.email }),
       });
 
-      if (status) await user.update({ verifiedphone: true });
+      if (status) await User.updateOne({ id: userId }, { verifiedphone: true });
 
       return {
         status,
@@ -83,13 +83,14 @@ export const verifyPhone = async (
       },
     });
 
-    if (!user)
+    if (!user) {
       return {
         payload: { status: false, message: "Invalid token" },
         code: 498,
       };
+    }
 
-    await user.update({ verifyToken: "" });
+    await User.updateOne({ id: userId }, { verifyToken: "" });
 
     if (parseInt(user.tokenExpires) < Date.now()) {
       return {
@@ -98,7 +99,10 @@ export const verifyPhone = async (
       };
     }
 
-    await user.update({ verifiedemail: true, tokenExpires: "0" });
+    await User.updateOne(
+      { id: userId },
+      { verifiedemail: true, tokenExpires: "0" }
+    );
 
     return {
       payload: { status: true, message: "Account verified" },
@@ -109,7 +113,7 @@ export const verifyPhone = async (
       payload: {
         status: false,
         message: "Error trying to verify account".concat(
-          devEnv ? ": " + error : ""
+          devEnv ? `: ${error}` : ""
         ),
       },
       code: 500,
@@ -134,7 +138,7 @@ export const updateProfile = async (
 
     delete params.userId;
 
-    await user.update(params);
+    await User.updateOne({ id: userId }, params);
 
     return {
       status: true,
@@ -145,7 +149,7 @@ export const updateProfile = async (
       payload: {
         status: false,
         message: "Error trying to update profile".concat(
-          devEnv ? ": " + error : ""
+          devEnv ? `: ${error}` : ""
         ),
       },
       code: 500,
@@ -171,10 +175,10 @@ export const updatePassword = async (
     if (!user.validatePassword(password))
       return { status: false, message: "Old password is Invalid" };
 
-    let update: any = { password: newPassword };
+    const update: any = { password: newPassword };
     if (logOtherDevicesOut) update.loginValidFrom = Date.now();
 
-    await user.update(update);
+    await User.updateOne({ id: userId }, update);
 
     return {
       status: true,
@@ -191,7 +195,7 @@ export const updatePassword = async (
       payload: {
         status: false,
         message: "Error trying to updating password".concat(
-          devEnv ? ": " + error : ""
+          devEnv ? `: ${error}` : ""
         ),
       },
       code: 500,
@@ -210,8 +214,11 @@ export const logOtherDevicesOut = async (
   try {
     const { userId } = params;
 
-    const user: UserSchema = await User.findByPk(userId);
-    await user.update({ loginValidFrom: Date.now().toString() });
+    const user: UserSchema = await User.findById(userId);
+    await User.updateOne(
+      { id: userId },
+      { loginValidFrom: Date.now().toString() }
+    );
 
     const data: any = jwt.generate({
       payload: user.id,
@@ -220,7 +227,7 @@ export const logOtherDevicesOut = async (
 
     return {
       status: true,
-      message: `Other Devices have been logged out`,
+      message: "Other Devices have been logged out",
       data,
     };
   } catch (error) {
@@ -228,7 +235,7 @@ export const logOtherDevicesOut = async (
       payload: {
         status: false,
         message: "Error trying to log other devices out".concat(
-          devEnv ? ": " + error : ""
+          devEnv ? `: ${error}` : ""
         ),
       },
       code: 500,
@@ -252,12 +259,12 @@ export const signOut = async (
       { where: { id: userId } }
     );
 
-    return { status: true, message: `Signed out` };
+    return { status: true, message: "Signed out" };
   } catch (error) {
     return {
       payload: {
         status: false,
-        message: "Error trying to sign out".concat(devEnv ? ": " + error : ""),
+        message: "Error trying to sign out".concat(devEnv ? `: ${error}` : ""),
       },
       code: 500,
     };
@@ -291,24 +298,24 @@ export const getAllUsers = async (
 
     let where = {};
 
-    if (name) where = { ...where, name: { [Op.like]: `%${name}%` } };
-    if (email) where = { ...where, email: { [Op.like]: `%${email}%` } };
+    if (name) where = { ...where, name: { $regex: `.*${name}.*` } };
+    if (email) where = { ...where, email: { $regex: `.*${email}.*` } };
 
-    if (phone) where = { ...where, phone: { [Op.like]: `%${phone}%` } };
+    if (phone) where = { ...where, phone: { $regex: `.*${phone}.*` } };
 
     if (gender) where = { ...where, gender };
     if (role) where = { ...where, role };
     if (dob) where = { ...where, dob };
 
     if (permissions)
-      where = { ...where, permissions: { [Op.in]: permissions } };
+      where = { ...where, permissions: { $in: permissions } };
 
     if ("verifiedemail" in params) where = { ...where, verifiedemail };
     if ("verifiedphone" in params) where = { ...where, verifiedphone };
     if ("active" in params) where = { ...where, active };
     if ("isDeleted" in params) where = { ...where, isDeleted };
 
-    const data: Array<UserSchema> = await User.findAll({
+    const data: Array<UserSchema> = await User.find({
       where,
       order: [["createdAt", "DESC"]],
       limit: pageSize,
@@ -328,7 +335,7 @@ export const getAllUsers = async (
       payload: {
         status: false,
         message: "Error trying to get all users".concat(
-          devEnv ? ": " + error : ""
+          devEnv ? `: ${error}` : ""
         ),
       },
       code: 500,

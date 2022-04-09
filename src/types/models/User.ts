@@ -1,4 +1,4 @@
-import { Model } from "sequelize/types";
+import { Query } from "mongoose";
 
 interface User {
   id?: string;
@@ -15,7 +15,7 @@ interface User {
   active?: boolean;
   createdAt?: Date;
   loginValidFrom?: string;
-  transform?: Function;
+  toJSON?: Function;
   validatePassword?: Function;
   updatedAt?: Date;
   verifyToken?: string;
@@ -24,4 +24,4 @@ interface User {
   tokenExpires?: string;
 }
 
-export interface UserSchema extends Model<User>, User {}
+export interface UserSchema extends Query<any, any>, User {}
