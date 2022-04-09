@@ -1,4 +1,4 @@
-# api-template-2
+# api-template-mongodb
 
 Express API template built with typescript
 
